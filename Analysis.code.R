@@ -33,6 +33,8 @@ source("Microbiome.function.R")
 pro_all=read.table("data.txt",sep = "\t",header = T,check.names = F,stringsAsFactors = F)
 coupling=read.table("Coupling.txt",sep = "\t",header = T,stringsAsFactors = F,check.names = F)
 pheno_all=read.table("Olink_proteomics_phenotype_v4.txt",sep = "\t",header = T,stringsAsFactors = F,check.names = F)
+surgery_data=read.table("NewSurgeryData!.txt",sep = "\t",header = T,stringsAsFactors = F)
+pheno_all=merge(pheno_all,surgery_data,by.x="UMCG1000IBD-ID",by.y="ID",all=T)
 aa=pheno_all[,"DateofPlasmaSample",drop=F]
 bb=str_split_fixed(aa$`DateofPlasmaSample`, "/", 3)
 bb=apply(bb,2,function(x){
@@ -212,7 +214,7 @@ pro_cd=pro_all_distance[rownames(pro_all_distance) %in% pheno_all_distance$`UMCG
 pro_uc=pro_all_distance[rownames(pro_all_distance) %in% pheno_all_distance$`UMCG1000IBD-ID`[pheno_all_distance$`IBD type`=="UC"],]
 pro_covariate=pheno_all_distance[,c("Age","Gender","Plasma Storage Time","BMI","Current smoking","Aminosalicylates","Thiopurines","Steroids",
                                     "Calcineurin_inhibitors","Methotrexaat","Mycofenolatemofetil","oac","antibiotics",
-                                    "anti_TNF","History of colectomy","History of ileocecal resection")]
+                                    "anti_TNF","History.of.colectomy","History.of.ileocecal.resection")]
 rownames(pro_covariate)=pheno_all_distance$`UMCG1000IBD-ID`
 pro_covariate$Gender[pro_covariate$Gender=="Female"]=1
 pro_covariate$Gender[pro_covariate$Gender=="Male"]=2
@@ -280,7 +282,7 @@ write.table(cohort_compare,"tables/CD.UC.proteins.compare.txt",sep = "\t",quote 
 # multivariable model
 pro_covariate1=pheno_all_distance[,c("IBD type","Age","Gender","Plasma Storage Time","BMI","Current smoking","Aminosalicylates","Thiopurines","Steroids",
                                     "Calcineurin_inhibitors","Methotrexaat","Mycofenolatemofetil","oac","antibiotics",
-                                    "anti_TNF","History of colectomy","History of ileocecal resection"),drop=F]
+                                    "anti_TNF","History.of.colectomy","History.of.ileocecal.resection"),drop=F]
 rownames(pro_covariate1)=pheno_all_distance$`UMCG1000IBD-ID`
 pro_covariate1$Gender[pro_covariate1$Gender=="Female"]=1
 pro_covariate1$Gender[pro_covariate1$Gender=="Male"]=2
@@ -386,6 +388,33 @@ glm_uc = foreach(i=1:ncol(pro_uc),.combine = rbind) %do%  {
   }
   
 }
+glm_cd_sig=glm_cd[glm_cd$MultiVariate.FDR<0.1,]
+glm_uc_sig=glm_uc[glm_uc$MultiVariate.FDR<0.1,]
+glm_cd_sig=na.omit(glm_cd_sig)
+glm_uc_sig=na.omit(glm_uc_sig)
+
+glm_cd_sig_pro=as.character(unique(glm_cd_sig$Protein))
+glm_uc_sig_pro=as.character(unique(glm_uc_sig$Protein))
+glm_cd_sig_fact=data.frame(Protein=NA,Group="CD",SignificantFactor=NA)
+for(i in glm_cd_sig_pro){
+  tmp=glm_cd_sig[glm_cd_sig$Protein==i,,drop=F]
+  tmp.facotr=paste(tmp$MultiVariate,collapse  = "&")
+  tmp.data=data.frame(Protein=i,Group="CD",SignificantFactor=tmp.facotr)
+  glm_cd_sig_fact=rbind(glm_cd_sig_fact,tmp.data)
+}
+glm_cd_sig_fact=na.omit(glm_cd_sig_fact)
+glm_uc_sig_fact=data.frame(Protein=NA,Group="UC",SignificantFactor=NA)
+for(i in glm_uc_sig_pro){
+  tmp=glm_uc_sig[glm_uc_sig$Protein==i,,drop=F]
+  tmp.facotr=paste(tmp$MultiVariate,collapse  = "&")
+  tmp.data=data.frame(Protein=i,Group="uc",SignificantFactor=tmp.facotr)
+  glm_uc_sig_fact=rbind(glm_uc_sig_fact,tmp.data)
+}
+glm_uc_sig_fact=na.omit(glm_uc_sig_fact)
+
+glm_sig_fact=rbind(glm_cd_sig_fact,glm_uc_sig_fact)
+write.table(glm_sig_fact,"tables/Factor.perProtein.txt",sep = "\t",row.names = F,quote = F)
+
 glm_cd$MultiVariate[is.na(glm_cd$MultiVariate)]="Age"
 glm_uc$MultiVariate[is.na(glm_uc$MultiVariate)]="Age"
 glm_cd[is.na(glm_cd)]=0
@@ -400,12 +429,12 @@ sample_order=sample_order[sample_order$MultiVariate=="Age",]
 sample_order=as.character(sample_order$Protein)
 sample_order=append(sample_order,colnames(pro_all_distance)[!colnames(pro_all_distance) %in% sample_order])
 
-set.seed(222)
-palette <- distinctColorPalette(16)
+assign_color=read.table("Assigin_color.txt",sep = "\t",header = T,stringsAsFactors = F,quote = "",comment.char = "")
+palette=assign_color$color
 ggplot() +
   geom_bar(data=glm_cd,aes(x=Protein,y=MultiVariate.explain,fill=MultiVariate),stat="identity",colour="black") +
   scale_x_discrete(limits = sample_order)+
-  scale_fill_manual(breaks = category_order,values = palette)+
+  scale_fill_manual(breaks = assign_color$category,values = assign_color$color)+
   geom_bar(data=glm_uc,aes(x=Protein,y=-MultiVariate.explain,fill=MultiVariate), stat="identity",colour="black") +
   theme(plot.subtitle = element_text(vjust = 1), 
         plot.caption = element_text(vjust = 1), 
@@ -422,19 +451,16 @@ ggsave("Plot/Multiplevariation.pdf",height = 8,width = 14)
 glm_combine$MultiVariate[is.na(glm_combine$MultiVariate)]="Age"
 glm_combine[is.na(glm_combine)]=0
 glm_combine$MultiVariate=gsub("`","",glm_combine$MultiVariate)
-category_order=colnames(pro_covariate1)
 glm_combine$MultiVariate<-factor(glm_combine$MultiVariate,levels = rev(category_order))
 sample_order=glm_combine[order(glm_combine$MultiVariate.explain,decreasing = T),]
 sample_order=sample_order[sample_order$MultiVariate=="Age",]
 sample_order=as.character(sample_order$Protein)
 sample_order=append(sample_order,colnames(pro_all_distance)[!colnames(pro_all_distance) %in% sample_order])
 
-set.seed(21242)
-palette <- distinctColorPalette(17)
 ggplot() +
   geom_bar(data=glm_combine,aes(x=Protein,y=MultiVariate.explain,fill=MultiVariate),stat="identity",colour="black") +
   scale_x_discrete(limits = sample_order)+
-  scale_fill_manual(breaks = category_order,values = palette)+
+  scale_fill_manual(breaks = assign_color$category,values = assign_color$color)+
   theme(plot.subtitle = element_text(vjust = 1), 
         plot.caption = element_text(vjust = 1), 
         panel.grid.major = element_blank(),
@@ -447,7 +473,7 @@ ggplot() +
   geom_hline(yintercept = 0,  size=1,colour = 'white')
 ggsave("Plot/Multiplevariation.combine.pdf",height = 8,width = 14)
 
-matrix_cd=matrix(ncol = 0,nrow = 92)
+matrix_cd=matrix(ncol = 0,nrow = 91)
 matrix_cd=as.data.frame(matrix_cd)
 rownames(matrix_cd)=colnames(pro_all_distance)
 matrix_cd=matrix_cd[order(rownames(matrix_cd)),,drop=F]
@@ -468,7 +494,7 @@ pdf("./Plot/Upset.plot.CD.pdf",width = 15,height = 6)
 upset(matrix_cd, sets = colnames(matrix_cd), sets.bar.color = "#56B4E9",point.size=3,
       order.by = "freq",  keep.order = TRUE)
 dev.off()
-matrix_uc=matrix(ncol = 0,nrow = 92)
+matrix_uc=matrix(ncol = 0,nrow = 91)
 matrix_uc=as.data.frame(matrix_uc)
 rownames(matrix_uc)=colnames(pro_all_distance)
 matrix_uc=matrix_uc[order(rownames(matrix_uc)),,drop=F]
@@ -661,6 +687,7 @@ ggplot(tmp_cd_medication, aes(x=Protein, y=MultiVariate, fill=color)) +
   geom_tile(aes(fill=color), colour="white")+
   theme_classic() + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + labs(x = "", y= "") + 
   coord_fixed(ratio=1)
+
 
 # ======================================  clinical outcome/genetics correlation ======================================
 # correct for all significant covariates
@@ -907,11 +934,12 @@ for(i in 1:1){
 }
 tmp_plot=tmp_plot[-1,]
 tmp_plot=na.omit(tmp_plot)
+tmp_plot=tmp_plot[tmp_plot$Location!=3,]
 tmp_plot$Location=as.factor(tmp_plot$Location)
 ggplot(tmp_plot, aes(Location, Value,color=Location,fill=Location)) +
   geom_point(position = "jitter",size=3,shape = 21, color = "black") +
   geom_boxplot(alpha = 0,color="black")+theme_bw()+scale_fill_jama()
-ggsave("Plot/MontrealLocation.pdf",width = 12,height = 5)
+ggsave("Plot/MontrealLocation.pdf",width = 8,height = 5)
 write.table(Mon_locate_cd,file = "tables/Mon_locate.CD.txt",row.names = F,quote = F,sep = "\t")
 
 wilcox.test(tmp$`FGF-19`[tmp$`Montreal Location`=="0"],tmp$`FGF-19`[tmp$`Montreal Location`=="1"])
@@ -1756,3 +1784,4 @@ celltype$rs2032887=as.factor(celltype$rs2032887)
 ggplot(celltype, aes(x=rs2032887, y=`CD8+ Tcm`,color=rs2032887)) + 
   geom_point(alpha = 0.5, position = "jitter",size=3) +
   geom_boxplot(alpha = 0)+scale_color_jama()+theme_bw()
+

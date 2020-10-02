@@ -28,6 +28,7 @@ library(tidyverse)
 library(uwot)
 source("Microbiome.function.R")
 
+
 # ======================================  data check ======================================
 # Proteomics, data import and rename 
 pro_all=read.table("data.txt",sep = "\t",header = T,check.names = F,stringsAsFactors = F)
@@ -134,6 +135,25 @@ ggplot (pcoas, aes(PCoA1,PCoA2,color=qc_warning)) +
   theme_bw()+scale_color_jama()
 ggsave("./Plot/QC.pdf")
 
+# check per protein
+limit=read.table("proteins.txt",sep = "\t",header = T,stringsAsFactors = F)
+
+summary_protein=matrix(nrow = nrow(limit),ncol = 4)
+summary_protein=as.data.frame(summary_protein)
+colnames(summary_protein)=c("protein","LOD","sample_above_limit","sample_size")
+for(i in 1:nrow(limit)){
+  tmp.protein=limit$protein[i]
+  summary_protein$protein[i]=tmp.protein
+  tmp.data=pro_all_distance[,tmp.protein,drop=F]
+  tmp.data=tmp.data[tmp.data>limit$LOD[i]]
+  summary_protein$sample_above_limit[i]=length(tmp.data)
+  summary_protein$sample_size[i]=nrow(pro_all_distance)
+  summary_protein$LOD=limit$LOD[i]
+}
+summary_protein$rate=summary_protein$sample_above_limit/summary_protein$sample_size
+write.table(summary_protein,"tables/QC.perProtein.txt",sep = "\t",row.names = F,quote = F)
+
+# Umap clustering
 set.seed(10)
 umap= umap(pro_all_distance[,c(1:90,92)], init = "spca")
 rownames(umap)=rownames(pro_all_distance)
@@ -204,6 +224,7 @@ pro_all_distance=pro_all_distance[,c(1:90,92),drop=F]
 #ggsave("Plot/TNFcheck.pdf")
 #pro_all_distance$group=NULL
 #write.table(pro_all_distance[,c("TNF","group"),drop=F],file = "TNFcheck.txt",row.names = T,quote = F)
+
 
 # ======================================  factor assess ======================================
 # alignment proteins and covariate

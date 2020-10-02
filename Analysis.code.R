@@ -1,3 +1,12 @@
+# this is the whole script for all analysis, including:
+
+# 1) data check, PCA, Umap, clustering 2) multiple variables regression to assess factors
+# 3) clinics outcome and host genestics correlation
+# 4) CD/UC prediction
+# 5) Mendelien Randomization
+# 6) eQTL + mbQTL integration
+# 7) pQTL affect on cell type enrichment (predicted from RNA-seq)
+
 library(ggplot2)
 library(ggridges)
 library(dplyr)
